@@ -30,28 +30,27 @@ st.markdown("""
     }
     
     /* Header styling */
+   
     .app-header {
-        background: linear-gradient(90deg, #1e4620 0%, #2e7d32 100%);
-        color: white;
-        padding: 2rem;
-        border-radius: 16px;
-        box-shadow: 0 8px 32px 0 rgba(46, 125, 50, 0.15);
-        margin-bottom: 2rem;
-        border-left: 8px solid #81c784;
-    }
-    
-    .app-header h1 {
-        margin: 0;
-        font-weight: 700;
-        font-size: 2.5rem;
-    }
-    
-    .app-header p {
-        margin: 5px 0 0 0;
-        font-size: 1.1rem;
-        color: #e8f5e9;
-    }
-    
+    background: linear-gradient(90deg, #1b5e20 0%, #2e7d32 100%);
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 1.2rem;
+    box-shadow: 0 3px 10px rgba(46, 125, 50, 0.12);
+}
+
+.app-header h1 {
+    margin: 0;
+    font-weight: 700;
+    font-size: 2rem;
+}
+
+.app-header p {
+    margin-top: 4px;
+    font-size: 0.95rem;
+    color: #e8f5e9;
+}
     /* Card design elements */
     .glass-card {
         background: rgba(255, 255, 255, 0.8);
@@ -165,7 +164,7 @@ if "last_sensors" not in st.session_state:
 st.markdown("""
 <div class="app-header">
     <h1>AgriShield IoT™</h1>
-    <p>AI-Powered Crop Health, Intelligent Irrigation & Intrusion Security Advisor for Small-Scale Farms</p>
+    <p>Real-Time Smart Agriculture Monitoring & AI Prediction System</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -197,9 +196,6 @@ with st.sidebar:
         options=["Normal", "Drought", "Heavy Rain", "Animal Intrusion", "Compost Rotting", "Soil Acidification"],
         index=0
     )
-    
-    # Advanced manual sliders overlay option
-    manual_override = st.checkbox("⚙️ Enable Manual Sensor Injection", value=False)
     
     # Trigger tick logic
     tick_btn = st.button("📡 Fetch Next Telemetry Tick", type="primary", use_container_width=True)
@@ -285,7 +281,7 @@ with tab1:
     
     # 2. Metric Grid Layout
     st.subheader("📡 Live Sensor Telemetry (Node 01 - Western Zone)")
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    col1, col2, col3, col4 = st.columns(4)
     
     col1.metric(
         label="Soil Moisture (SEN0161)", 
@@ -306,16 +302,6 @@ with tab1:
         label="MQ-135 Gas", 
         value=f"{curr['MQ135_Gas']:.0f} ppm", 
         delta=f"{deltas['MQ135_Gas']:.0f} ppm" if deltas['MQ135_Gas'] != 0 else None
-    )
-    col5.metric(
-        label="Ambient Temp (DHT11)", 
-        value=f"{curr['Ambient_Temp']:.1f}°C", 
-        delta=f"{deltas['Ambient_Temp']:.1f}°C" if deltas['Ambient_Temp'] != 0 else None
-    )
-    col6.metric(
-        label="Vibration (SW-420)", 
-        value=f"{curr['SW420_Vibration']:.1f}", 
-        delta=f"{deltas['SW420_Vibration']:.1f}" if deltas['SW420_Vibration'] != 0 else None
     )
     
     st.markdown('<div style="margin-top:20px;"></div>', unsafe_allow_html=True)
