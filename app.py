@@ -5,6 +5,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import pyrebase
 
 # Set Streamlit Page Configuration with startup icon
 st.set_page_config(
@@ -114,7 +115,20 @@ st.markdown("""
 # Imports from src subfolder
 from src.data_generator import generate_complete_dataset, CROP_PROFILES
 from src.model import train_pipeline, load_pipeline, predict_realtime, CROPS_LIST
-from src.iot_simulator import IoTSimulator
+
+# Firebase Configuration
+firebaseConfig = {
+    "apiKey": "AIzaSyC2akXH7pcxFbCsbzERxX0BZvC_j4HU-pI",
+    "authDomain": "YOUR_PROJECT.firebaseapp.com",
+    "databaseURL": "https://smartagriml-d3497-default-rtdb.asia-southeast1.firebasedatabase.app/",
+    "projectId": "smartagriml-d3497",
+    "storageBucket": "YOUR_PROJECT.appspot.com",
+    "messagingSenderId": "XXXX",
+    "appId": "XXXX"
+}
+
+firebase = pyrebase.initialize_app(firebaseConfig)
+db = firebase.database()
 
 # Ensure directories exist
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -145,10 +159,7 @@ if "current_sensors" not in st.session_state:
     st.session_state["current_sensors"] = {}
 if "last_sensors" not in st.session_state:
     st.session_state["last_sensors"] = {}
-if "iot_sim" not in st.session_state:
-    st.session_state["iot_sim"] = IoTSimulator()
-if "telemetry_tick_counter" not in st.session_state:
-    st.session_state["telemetry_tick_counter"] = 0
+
 
 # App branding and description header
 st.markdown("""
@@ -196,58 +207,50 @@ with st.sidebar:
     # Automatic drift toggle
     auto_refresh_secs = st.slider("🔄 Auto Sync Interval (seconds)", min_value=0, max_value=15, value=0, help="Set to 0 to disable auto-refresh. Requires clicking the button manually.")
 
-# Handle State Transition and Simulation ticks
-sim = st.session_state["iot_sim"]
-baseline = sim.get_default_baseline(selected_crop)
+# Read Live Sensor Data From Firebase
+# ================= FIREBASE LIVE SENSOR DATA =================
 
-# If manual override is enabled, let user set values using sliders in sidebar
-if manual_override:
-    st.sidebar.markdown('<div class="sidebar-header">🔧 Physical Sensor Values</div>', unsafe_allow_html=True)
-    o_moist = st.sidebar.slider("Soil Moisture (%)", 5.0, 100.0, float(st.session_state["current_sensors"].get("Soil_Moisture", baseline["Soil_Moisture"])))
-    o_stemp = st.sidebar.slider("Soil Temp (°C)", 5.0, 55.0, float(st.session_state["current_sensors"].get("Soil_Temp", baseline["Soil_Temp"])))
-    o_ph = st.sidebar.slider("pH Level", 3.0, 11.0, float(st.session_state["current_sensors"].get("pH", baseline["pH"])), step=0.1)
-    o_gas = st.sidebar.slider("MQ-135 Gas (ppm)", 50.0, 1000.0, float(st.session_state["current_sensors"].get("MQ135_Gas", baseline["MQ135_Gas"])))
-    o_atemp = st.sidebar.slider("Ambient Temp (°C)", 10.0, 50.0, float(st.session_state["current_sensors"].get("Ambient_Temp", baseline["Ambient_Temp"])))
-    o_ahum = st.sidebar.slider("Ambient Humidity (%)", 10.0, 100.0, float(st.session_state["current_sensors"].get("Ambient_Humidity", baseline["Ambient_Humidity"])))
-    o_vib = st.sidebar.slider("SW-420 Vibration", 0.0, 100.0, float(st.session_state["current_sensors"].get("SW420_Vibration", baseline["SW420_Vibration"])))
-    
-    # Manual injection override updates st.session_state["current_sensors"]
-    st.session_state["current_sensors"] = {
-        "Soil_Moisture": o_moist,
-        "Soil_Temp": o_stemp,
-        "pH": o_ph,
-        "MQ135_Gas": o_gas,
-        "Ambient_Temp": o_atemp,
-        "Ambient_Humidity": o_ahum,
-        "SW420_Vibration": o_vib,
-        "ESP32_Voltage": 3.45 - 0.0005 * o_vib,
-        "ESP32_RSSI": -52.0 if o_vib < 50 else -70.0,
-        "ESP32_Battery": 95.0
-    }
-else:
-    # Trigger tick when button clicked, or if first execution
-    if tick_btn or not st.session_state["current_sensors"] or st.session_state["telemetry_tick_counter"] == 0:
-        st.session_state["last_sensors"] = st.session_state["current_sensors"].copy()
-        st.session_state["current_sensors"] = sim.generate_next_tick(
-            st.session_state["current_sensors"], 
-            selected_crop, 
-            scenario
-        )
-        st.session_state["telemetry_tick_counter"] += 1
-        
-        # Add to history
-        hist_entry = st.session_state["current_sensors"].copy()
-        hist_entry["Timestamp"] = pd.Timestamp.now()
-        hist_entry["Crop_Type"] = selected_crop
-        st.session_state["sensor_history"].append(hist_entry)
-        
-        # Limit history length to 50
-        if len(st.session_state["sensor_history"]) > 50:
-            st.session_state["sensor_history"].pop(0)
+firebase_data = db.child("sensor").get()
 
-# Calculate Deltas
-deltas = sim.calculate_deltas(st.session_state["current_sensors"], st.session_state["last_sensors"])
-curr = st.session_state["current_sensors"]
+sensor = firebase_data.val()
+
+if sensor is None:
+    st.error("❌ No sensor data found in Firebase.")
+    st.stop()
+
+curr = {
+    "Soil_Moisture": float(sensor.get("soil_moisture", 0)),
+    "Soil_Temp": float(sensor.get("soil_temperature", 0)),
+    "pH": float(sensor.get("ph", 0)),
+    "MQ135_Gas": float(sensor.get("gas", 0)),
+
+    # You currently don't upload these from ESP32
+    "Ambient_Temp": 0,
+    "Ambient_Humidity": float(sensor.get("humidity", 0)),
+    "SW420_Vibration": 0,
+
+    # Dummy system values for now
+    "ESP32_Voltage": 3.3,
+    "ESP32_RSSI": -55,
+    "ESP32_Battery": 85
+}
+# Store Firebase live data into history
+hist_entry = curr.copy()
+hist_entry["Timestamp"] = pd.Timestamp.now()
+
+st.session_state["sensor_history"].append(hist_entry)
+
+# Limit history
+if len(st.session_state["sensor_history"]) > 50:
+    st.session_state["sensor_history"].pop(0)
+deltas = {
+    "Soil_Moisture": 0,
+    "Soil_Temp": 0,
+    "pH": 0,
+    "MQ135_Gas": 0,
+    "Ambient_Temp": 0,
+    "SW420_Vibration": 0
+}
 
 # Set up Auto-Refresh using Streamlit timer injection (if requested)
 if auto_refresh_secs > 0:
